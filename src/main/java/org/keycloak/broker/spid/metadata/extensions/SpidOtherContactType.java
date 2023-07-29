@@ -55,10 +55,10 @@ public abstract class SpidOtherContactType extends ContactType {
     protected void addExtensionElement(String name, String value)  {
         if (!StringUtil.isNullOrEmpty(value))
         {
-            Element ipaCodeElement = doc.createElementNS(SPID_METADATA_EXTENSIONS_NS, name);
-            ipaCodeElement.setAttributeNS(XMLNS_NS, "xmlns:spid", SPID_METADATA_EXTENSIONS_NS);
-            ipaCodeElement.setTextContent(value);
-            getExtensions().addExtension(ipaCodeElement);
+            Element element = doc.createElementNS(SPID_METADATA_EXTENSIONS_NS, name);
+            element.setAttributeNS(XMLNS_NS, "xmlns:spid", SPID_METADATA_EXTENSIONS_NS);
+            element.setTextContent(value);
+            getExtensions().addExtension(element);
         }
     }
 
