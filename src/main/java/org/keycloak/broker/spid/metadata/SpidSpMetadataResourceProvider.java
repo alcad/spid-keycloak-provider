@@ -78,6 +78,8 @@ import org.keycloak.broker.spid.SpidIdentityProviderFactory;
 
 public class SpidSpMetadataResourceProvider implements RealmResourceProvider {
     protected static final Logger logger = Logger.getLogger(SpidSpMetadataResourceProvider.class);
+    public static final String XMLNS_NS = "http://www.w3.org/2000/xmlns/";
+    public static final String SPID_METADATA_EXTENSIONS_NS = "https://spid.gov.it/saml-extensions";
 
     private KeycloakSession session;
 
@@ -246,6 +248,15 @@ public class SpidSpMetadataResourceProvider implements RealmResourceProvider {
 
             String descriptor = writeEntityDescriptorWithConsistentID(entityDescriptor);
 
+            Document metadataDocument = DocumentUtil.getDocument(descriptor);
+
+            boolean isSpAggregator = firstSpidProvider.getConfig().isSpAggregator();
+            if (isSpAggregator) {
+                Element element = (Element) metadataDocument.getElementsByTagName("md:ContactPerson").item(0);
+                element.setAttributeNS(XMLNS_NS, "xmlns:spid", SPID_METADATA_EXTENSIONS_NS);
+                element.setAttribute("spid:entityType", "spid:aggregator");
+            }
+
             // Metadata signing
             if (firstSpidProvider.getConfig().isSignSpMetadata())
             {
@@ -253,7 +264,6 @@ public class SpidSpMetadataResourceProvider implements RealmResourceProvider {
                 String keyName = firstSpidProvider.getConfig().getXmlSigKeyInfoKeyNameTransformer().getKeyName(activeKey.getKid(), activeKey.getCertificate());
                 KeyPair keyPair = new KeyPair(activeKey.getPublicKey(), activeKey.getPrivateKey());
 
-                Document metadataDocument = DocumentUtil.getDocument(descriptor);
                 SAML2Signature signatureHelper = new SAML2Signature();
                 signatureHelper.setSignatureMethod(firstSpidProvider.getSignatureAlgorithm().getXmlSignatureMethod());
                 signatureHelper.setDigestMethod(firstSpidProvider.getSignatureAlgorithm().getXmlSignatureDigestMethod());

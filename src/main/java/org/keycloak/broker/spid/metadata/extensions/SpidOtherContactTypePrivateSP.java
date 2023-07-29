@@ -13,6 +13,11 @@ class SpidOtherContactTypePrivateSP extends SpidOtherContactType {
         // Fiscal Code
         addExtensionElement("spid:FiscalCode", config.getFiscalCode());
 
-        addQualifier("spid:Private");
+        if(config.isSpAggregator() == true) {
+            // Operator Type
+            addQualifier("spid:" + config.getOperatorType());
+        } else {
+            addQualifier("spid:Private");
+        }
     }
 }

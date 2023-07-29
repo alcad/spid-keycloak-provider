@@ -11,6 +11,15 @@ class SpidOtherContactTypePublicSP extends SpidOtherContactType {
         // IPA Code
         addExtensionElement("spid:IPACode", config.getIpaCode());
 
-        addQualifier("spid:Public");
+        if(config.isSpAggregator() == true) {
+            // VAT Number
+            addExtensionElement("spid:VATNumber", config.getVatNumber());
+            // Fiscal Code
+            addExtensionElement("spid:FiscalCode", config.getFiscalCode());
+            // Operator Type
+            addQualifier("spid:" + config.getOperatorType());
+        } else {
+            addQualifier("spid:Public");
+        }
     }
 }

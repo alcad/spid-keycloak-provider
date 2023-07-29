@@ -26,6 +26,8 @@ public class SpidIdentityProviderConfig extends SAMLIdentityProviderConfig  {
     public static final String ORGANIZATION_DISPLAY_NAMES = "organizationDisplayNames";
     public static final String ORGANIZATION_URLS = "organizationUrls";
     public static final String OTHER_CONTACT_SP_PRIVATE = "otherContactIsSpPrivate";
+    public static final String OTHER_CONTACT_SP_AGGREGATOR = "otherContactIsSpAggregator";
+    public static final String OTHER_CONTACT_OPERATOR_TYPE = "operatorType";
     public static final String OTHER_CONTACT_IPA_CODE = "otherContactIpaCode";
     public static final String OTHER_CONTACT_VAT_NUMBER = "otherContactVatNumber";
     public static final String OTHER_CONTACT_FISCAL_CODE = "otherContactFiscalCode";
@@ -89,6 +91,22 @@ public class SpidIdentityProviderConfig extends SAMLIdentityProviderConfig  {
 
     public void setSpPrivate(boolean isPrivate) {
         getConfig().put(OTHER_CONTACT_SP_PRIVATE, String.valueOf(isPrivate));
+    }
+
+    public boolean isSpAggregator() {
+        return Boolean.valueOf(getConfig().get(OTHER_CONTACT_SP_AGGREGATOR));
+    }
+
+    public void setSpAggregator(boolean isAggregator) {
+        getConfig().put(OTHER_CONTACT_SP_AGGREGATOR, String.valueOf(isAggregator));
+    }
+
+    public String getOperatorType() {
+        return getConfig().get(OTHER_CONTACT_OPERATOR_TYPE);
+    }
+
+    public void setOperatorType(String operatorType) {
+        getConfig().put(OTHER_CONTACT_OPERATOR_TYPE, operatorType);
     }
 
     public String getIpaCode() {

@@ -396,8 +396,15 @@
                 </div>
                 <kc-tooltip>{{:: 'identity-provider.spid.is-sp-private.tooltip' | translate}}</kc-tooltip>
             </div>
+            <div class="form-group">
+                <label class="col-md-2 control-label" for="isSpAggregator">{{:: 'identity-provider.spid.is-sp-aggregator' | translate}}</label>
+                <div class="col-md-6">
+                    <input ng-model="identityProvider.config.otherContactIsSpAggregator" id="isSpAggregator" name="isSpAggregator" onoffswitchvalue on-text="{{:: 'onText' | translate}}" off-text="{{:: 'offText' | translate}}" />
+                </div>
+                <kc-tooltip>{{:: 'identity-provider.spid.is-sp-aggregator.tooltip' | translate}}</kc-tooltip>
+            </div>
             <!-- Other Contact Public SP -->
-            <div class="form-group" data-ng-show="identityProvider.config.otherContactIsSpPrivate != 'true'">
+            <div class="form-group" data-ng-show="identityProvider.config.otherContactIsSpPrivate != 'true' || identityProvider.config.otherContactIsSpAggregator == 'true'">
                 <label class="col-md-2 control-label" for="ipaCode">{{:: 'identity-provider.spid.ipaCode' | translate}}</label>
                 <div class="col-md-6">
                     <input class="form-control" id="ipaCode" type="text" ng-model="identityProvider.config.otherContactIpaCode"/>
@@ -405,14 +412,29 @@
                 <kc-tooltip>{{:: 'identity-provider.spid.ipaCode.tooltip' | translate}}</kc-tooltip>
             </div>
             <!-- Other Contact Private SP -->
-            <div class="form-group" data-ng-show="identityProvider.config.otherContactIsSpPrivate == 'true'">
+            <div class="form-group" data-ng-show="identityProvider.config.otherContactIsSpAggregator == 'true'">
+                <label class="col-md-2 control-label" for="operatorType">{{:: 'identity-provider.spid.operatorType' | translate}}</label>
+                <div class="col-md-6">
+                    <select class="form-control" id="operatorType" name="operatorType" ng-model="identityProvider.config.operatorType">
+                        <option value="">---</option>
+                        <option data-ng-show="identityProvider.config.otherContactIsSpPrivate != 'true'" value="PublicServicesFullAggregator">Aggregatore full di servizi pubblici</option>
+                        <option data-ng-show="identityProvider.config.otherContactIsSpPrivate != 'true'" value="PublicServicesLightAggregator">Aggregatore light di servizi pubblici</option>
+                        <option data-ng-show="identityProvider.config.otherContactIsSpPrivate == 'true'" value="PrivateServicesFullAggregator">Aggregatore full di servizi privati</option>
+                        <option data-ng-show="identityProvider.config.otherContactIsSpPrivate == 'true'" value="PrivateServicesLightAggregator">Aggregatore light di servizi privati</option>
+                        <option data-ng-show="identityProvider.config.otherContactIsSpPrivate != 'true'" value="PublicServicesFullOperator">Gestore full di servizi pubblici</option>
+                        <option data-ng-show="identityProvider.config.otherContactIsSpPrivate != 'true'" value="PublicServicesLightOperator">Gestore light di servizi pubblici</option>
+                    </select>
+                </div>
+                <kc-tooltip>{{:: 'identity-provider.spid.operatorType.tooltip' | translate}}</kc-tooltip>
+            </div>
+            <div class="form-group" data-ng-show="identityProvider.config.otherContactIsSpPrivate == 'true' || identityProvider.config.otherContactIsSpAggregator == 'true'">
                 <label class="col-md-2 control-label" for="vatNumber">{{:: 'identity-provider.spid.vatNumber' | translate}}</label>
                 <div class="col-md-6">
                     <input class="form-control" id="vatNumber" type="text" ng-model="identityProvider.config.otherContactVatNumber"/>
                 </div>
                 <kc-tooltip>{{:: 'identity-provider.spid.vatNumber.tooltip' | translate}}</kc-tooltip>
             </div>
-            <div class="form-group" data-ng-show="identityProvider.config.otherContactIsSpPrivate == 'true'">
+            <div class="form-group" data-ng-show="identityProvider.config.otherContactIsSpPrivate == 'true' || identityProvider.config.otherContactIsSpAggregator == 'true'">
                 <label class="col-md-2 control-label" for="fiscalCode">{{:: 'identity-provider.spid.fiscalCode' | translate}}</label>
                 <div class="col-md-6">
                     <input class="form-control" id="fiscalCode" type="text" ng-model="identityProvider.config.otherContactFiscalCode"/>
