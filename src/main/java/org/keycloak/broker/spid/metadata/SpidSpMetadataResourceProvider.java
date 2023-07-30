@@ -248,13 +248,12 @@ public class SpidSpMetadataResourceProvider implements RealmResourceProvider {
 
             String descriptor = writeEntityDescriptorWithConsistentID(entityDescriptor);
 
-            Document metadataDocument = DocumentUtil.getDocument(descriptor);
-
-            boolean isSpAggregator = firstSpidProvider.getConfig().isSpAggregator();
-            if (isSpAggregator) {
-                Element element = (Element) metadataDocument.getElementsByTagName("md:ContactPerson").item(0);
-                element.setAttributeNS(XMLNS_NS, "xmlns:spid", SPID_METADATA_EXTENSIONS_NS);
+            if (firstSpidProvider.getConfig().isSpAggregator()) {
+                Document document = DocumentUtil.getDocument(descriptor);
+                document.getDocumentElement().setAttributeNS(XMLNS_NS, "xmlns:spid", SPID_METADATA_EXTENSIONS_NS);
+                Element element = (Element) document.getElementsByTagName("md:ContactPerson").item(0);
                 element.setAttribute("spid:entityType", "spid:aggregator");
+                descriptor = DocumentUtil.getDocumentAsString(document);
             }
 
             // Metadata signing
@@ -268,6 +267,7 @@ public class SpidSpMetadataResourceProvider implements RealmResourceProvider {
                 signatureHelper.setSignatureMethod(firstSpidProvider.getSignatureAlgorithm().getXmlSignatureMethod());
                 signatureHelper.setDigestMethod(firstSpidProvider.getSignatureAlgorithm().getXmlSignatureDigestMethod());
 
+                Document metadataDocument = DocumentUtil.getDocument(descriptor);
                 Node nextSibling = metadataDocument.getDocumentElement().getFirstChild();
                 signatureHelper.setNextSibling(nextSibling);
 
