@@ -16,7 +16,6 @@
  */
 package org.keycloak.broker.spid;
 
-import java.io.InputStream;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -26,6 +25,7 @@ import javax.xml.namespace.QName;
 
 import org.keycloak.Config.Scope;
 import org.keycloak.broker.provider.AbstractIdentityProviderFactory;
+import org.keycloak.broker.spid.metadata.SpidSpMetadataResourceProvider;
 import org.keycloak.dom.saml.v2.assertion.AttributeType;
 import org.keycloak.dom.saml.v2.metadata.EndpointType;
 import org.keycloak.dom.saml.v2.metadata.EntitiesDescriptorType;
@@ -35,9 +35,12 @@ import org.keycloak.dom.saml.v2.metadata.KeyDescriptorType;
 import org.keycloak.dom.saml.v2.metadata.KeyTypes;
 import org.keycloak.models.IdentityProviderModel;
 import org.keycloak.models.KeycloakSession;
+import org.keycloak.provider.ConfiguredProvider;
+import org.keycloak.provider.ProviderConfigProperty;
 import org.keycloak.saml.common.constants.JBossSAMLURIConstants;
 import org.keycloak.saml.common.exceptions.ParsingException;
 import org.keycloak.saml.common.util.DocumentUtil;
+import org.keycloak.saml.common.util.StaxParserUtil;
 import org.keycloak.saml.processing.core.parsers.saml.SAMLParser;
 import org.keycloak.saml.validators.DestinationValidator;
 import org.w3c.dom.Element;
@@ -45,9 +48,9 @@ import org.w3c.dom.Element;
 /**
  * @author Pedro Igor
  */
-public class SpidIdentityProviderFactory extends AbstractIdentityProviderFactory<SpidIdentityProvider> {
+public class SpidIdentityProviderFactory extends AbstractIdentityProviderFactory<SpidIdentityProvider> implements ConfiguredProvider {
 
-    public static final String PROVIDER_ID = "spid";
+    public static final String PROVIDER_ID = "spid-saml";
 
     private static final String MACEDIR_ENTITY_CATEGORY = "http://macedir.org/entity-category";
     private static final String REFEDS_HIDE_FROM_DISCOVERY = "http://refeds.org/category/hide-from-discovery";
@@ -61,6 +64,7 @@ public class SpidIdentityProviderFactory extends AbstractIdentityProviderFactory
 
     @Override
     public SpidIdentityProvider create(KeycloakSession session, IdentityProviderModel model) {
+        model.getConfig().put(SpidIdentityProviderConfig.METADATA_URL, SpidSpMetadataResourceProvider.getMetadataURL(session).toString());
         return new SpidIdentityProvider(session, new SpidIdentityProviderConfig(model), destinationValidator);
     }
 
@@ -70,9 +74,9 @@ public class SpidIdentityProviderFactory extends AbstractIdentityProviderFactory
     }
 
     @Override
-    public Map<String, String> parseConfig(KeycloakSession session, InputStream inputStream) {
+    public Map<String, String> parseConfig(KeycloakSession session, String config) {
         try {
-            Object parsedObject = SAMLParser.getInstance().parse(inputStream);
+            Object parsedObject = SAMLParser.getInstance().parse(StaxParserUtil.getXMLEventReader(config));
             EntityDescriptorType entityType;
 
             if (EntitiesDescriptorType.class.isInstance(parsedObject)) {
@@ -199,5 +203,9 @@ public class SpidIdentityProviderFactory extends AbstractIdentityProviderFactory
         super.init(config);
 
         this.destinationValidator = DestinationValidator.forProtocolMap(config.getArray("knownProtocols"));
+    }
+
+    public List<ProviderConfigProperty> getConfigProperties() {
+        return SpidIdentityProviderConfig.getConfigProperties();
     }
 }

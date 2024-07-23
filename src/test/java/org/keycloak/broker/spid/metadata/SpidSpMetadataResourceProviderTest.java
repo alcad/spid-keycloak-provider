@@ -17,13 +17,6 @@
 
 package org.keycloak.broker.spid.metadata;
 
-import org.bouncycastle.asn1.x509.ExtendedKeyUsage;
-import org.bouncycastle.asn1.x509.KeyPurposeId;
-import org.bouncycastle.asn1.x509.X509Extensions;
-import org.bouncycastle.asn1.x509.X509Name;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.bouncycastle.x509.X509V3CertificateGenerator;
-import org.jboss.resteasy.spi.ResteasyUriBuilder;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +28,7 @@ import org.keycloak.broker.saml.SAMLIdentityProviderConfig;
 import org.keycloak.broker.spid.SpidIdentityProviderConfig;
 import org.keycloak.broker.spid.SpidIdentityProviderFactory;
 import org.keycloak.broker.spid.mappers.SpidUserAttributeMapper;
+import org.keycloak.common.crypto.CryptoIntegration;
 import org.keycloak.common.util.KeyUtils;
 import org.keycloak.crypto.Algorithm;
 import org.keycloak.crypto.KeyUse;
@@ -59,10 +53,10 @@ import org.xmlunit.builder.Input;
 import org.xmlunit.diff.Diff;
 import org.xmlunit.placeholder.PlaceholderDifferenceEvaluator;
 
-import javax.security.auth.x500.X500Principal;
-import javax.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriBuilder;
+
 import javax.xml.transform.Source;
-import java.math.BigInteger;
 import java.net.URI;
 import java.security.InvalidKeyException;
 import java.security.KeyPair;
@@ -71,7 +65,6 @@ import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.security.Security;
 import java.security.SignatureException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
@@ -121,25 +114,13 @@ public class SpidSpMetadataResourceProviderTest {
     }
 
     private static X509Certificate generateCertificate(final KeyPair keyPair) throws CertificateEncodingException, NoSuchAlgorithmException, SignatureException, NoSuchProviderException, InvalidKeyException {
-        Security.addProvider(new BouncyCastleProvider());
-        // build a certificate generator
-        X509V3CertificateGenerator certGen = new X509V3CertificateGenerator();
-        X500Principal dnName = new X500Principal("cn=Example_CN");
+        CryptoIntegration.init(SpidSpMetadataResourceProviderTest.class.getClassLoader());
 
-        // add some options
-        certGen.setSerialNumber(BigInteger.valueOf(System.currentTimeMillis()));
-        certGen.setSubjectDN(new X509Name("dc=Example_Name"));
-        certGen.setIssuerDN(dnName); // use the same
-        // yesterday
-        certGen.setNotBefore(new Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000));
-        // in 2 years
-        certGen.setNotAfter(new Date(System.currentTimeMillis() + 2 * 365 * 24 * 60 * 60 * 1000));
-        certGen.setPublicKey(keyPair.getPublic());
-        certGen.setSignatureAlgorithm("SHA256WithRSAEncryption");
-        certGen.addExtension(X509Extensions.ExtendedKeyUsage, true, new ExtendedKeyUsage(KeyPurposeId.id_kp_timeStamping));
-
-        // finally, sign the certificate with the private key of the same KeyPair
-        return certGen.generate(keyPair.getPrivate(), "BC");
+        return CryptoIntegration.getProvider().getCertificateUtils()
+            .createServicesTestCertificate("CN=Example_CN", 
+                new Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000),
+                new Date(System.currentTimeMillis() + 2 * 365 * 24 * 60 * 60 * 1000), 
+                keyPair);
     }
 
     @BeforeEach
@@ -149,7 +130,7 @@ public class SpidSpMetadataResourceProviderTest {
             when(keycloakSession.getContext()).thenReturn(keycloakContext);
             lenient().when(keycloakSession.getKeycloakSessionFactory()).thenReturn(keycloakSessionFactory);
             KeycloakUriInfo keycloakUriInfo = mock(KeycloakUriInfo.class);
-            lenient().when(keycloakUriInfo.getBaseUriBuilder()).thenAnswer(i -> ResteasyUriBuilder.fromUri(new URI(SP_KEYCLOAK_BASE_URL + "/auth")));
+            lenient().when(keycloakUriInfo.getBaseUriBuilder()).thenAnswer(i -> UriBuilder.fromUri(new URI(SP_KEYCLOAK_BASE_URL + "/auth")));
             lenient().when(keycloakContext.getUri()).thenReturn(keycloakUriInfo);
             when(keycloakContext.getRealm()).thenReturn(realm);
             lenient().when(realm.getName()).thenReturn("spid-realm");
@@ -184,7 +165,7 @@ public class SpidSpMetadataResourceProviderTest {
 
         Response response = invitationResourceProvider.get();
         assertEquals(200, response.getStatus());
-        assertMetaData(response.readEntity(String.class), "/metadata/expected_metadata_public_SP.xml");
+        assertMetaData(response.getEntity().toString(), "/metadata/expected_metadata_public_SP.xml");
     }
 
     @Test
@@ -193,7 +174,7 @@ public class SpidSpMetadataResourceProviderTest {
 
         Response response = invitationResourceProvider.get();
         assertEquals(200, response.getStatus());
-        assertMetaData(response.readEntity(String.class), "/metadata/expected_metadata_private_SP.xml");
+        assertMetaData(response.getEntity().toString(), "/metadata/expected_metadata_private_SP.xml");
     }
 
     private Map<String, String> mockPublicSPConfig() {

@@ -18,9 +18,7 @@
 package org.keycloak.broker.spid;
 
 import org.jboss.logging.Logger;
-import org.jboss.resteasy.annotations.cache.NoCache;
 
-import org.jboss.resteasy.spi.ResteasyProviderFactory;
 import org.keycloak.broker.provider.BrokeredIdentityContext;
 import org.keycloak.broker.provider.IdentityBrokerException;
 import org.keycloak.broker.provider.IdentityProvider;
@@ -73,20 +71,20 @@ import org.keycloak.services.Urls;
 import org.keycloak.services.managers.AuthenticationManager;
 import org.keycloak.services.messages.Messages;
 
-import javax.ws.rs.Consumes;
-import javax.ws.rs.FormParam;
-import javax.ws.rs.GET;
-import javax.ws.rs.POST;
-import javax.ws.rs.Path;
-import javax.ws.rs.QueryParam;
-import javax.ws.rs.PathParam;
-import javax.ws.rs.WebApplicationException;
-import javax.ws.rs.core.Context;
-import javax.ws.rs.core.HttpHeaders;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
-import javax.ws.rs.core.UriBuilder;
-import javax.ws.rs.core.UriInfo;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.FormParam;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriBuilder;
+import jakarta.ws.rs.core.UriInfo;
 import javax.xml.namespace.QName;
 import java.io.IOException;
 import java.security.Key;
@@ -110,6 +108,7 @@ import org.keycloak.saml.validators.ConditionsValidator;
 import org.keycloak.saml.validators.DestinationValidator;
 import org.keycloak.services.util.CacheControlUtil;
 import org.keycloak.sessions.AuthenticationSessionModel;
+import org.keycloak.utils.StringUtil;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -118,7 +117,7 @@ import java.net.URI;
 import java.security.cert.CertificateException;
 
 import java.util.Collections;
-import javax.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.core.MultivaluedMap;
 import javax.xml.crypto.dsig.XMLSignature;
 
 import java.util.Arrays;
@@ -129,10 +128,7 @@ import javax.xml.datatype.DatatypeConstants;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
 import org.keycloak.dom.saml.v2.protocol.AuthnContextComparisonType;
-import org.keycloak.saml.common.util.StringUtil;
 import org.keycloak.util.JsonSerialization;
-
-import static org.keycloak.utils.LockObjectsForModification.lockUserSessionsForModification;
 
 /**
  * @author <a href="mailto:bill@burkecentral.com">Bill Burke</a>
@@ -170,16 +166,18 @@ public class SpidSAMLEndpoint {
     private HttpHeaders headers;
 
 
-    public SpidSAMLEndpoint(RealmModel realm, SpidIdentityProvider provider, SpidIdentityProviderConfig config, IdentityProvider.AuthenticationCallback callback, DestinationValidator destinationValidator) {
-        this.realm = realm;
+    public SpidSAMLEndpoint(KeycloakSession session, SpidIdentityProvider provider, SpidIdentityProviderConfig config, IdentityProvider.AuthenticationCallback callback, DestinationValidator destinationValidator) {
+        this.realm = session.getContext().getRealm();
         this.config = config;
         this.callback = callback;
         this.provider = provider;
         this.destinationValidator = destinationValidator;
+        this.session = session;
+        this.clientConnection = session.getContext().getConnection();
+        this.headers = session.getContext().getRequestHeaders();
     }
 
     @GET
-    @NoCache
     @Path("descriptor")
     public Response getSPDescriptor() {
         return provider.export(session.getContext().getUri(), realm, null);
@@ -347,7 +345,7 @@ public class SpidSAMLEndpoint {
             }  else {
                 for (String sessionIndex : request.getSessionIndex()) {
                     String brokerSessionId = config.getAlias()  + "." + sessionIndex;
-                    UserSessionModel userSession = lockUserSessionsForModification(session, () -> session.sessions().getUserSessionByBrokerSessionId(realm, brokerSessionId));
+                    UserSessionModel userSession = session.sessions().getUserSessionByBrokerSessionId(realm, brokerSessionId);
                     if (userSession != null) {
                         if (userSession.getState() == UserSessionModel.State.LOGGING_OUT || userSession.getState() == UserSessionModel.State.LOGGED_OUT) {
                             continue;
@@ -426,10 +424,15 @@ public class SpidSAMLEndpoint {
 
             try {
                 AuthenticationSessionModel authSession;
-                if (clientId != null && ! clientId.trim().isEmpty()) {
+                if (StringUtil.isNotBlank(clientId)) {
                     authSession = samlIdpInitiatedSSO(clientId);
-                } else {
+                } else if (StringUtil.isNotBlank(relayState)) {
                     authSession = callback.getAndVerifyAuthenticationSession(relayState);
+                } else {
+                    logger.error("SAML RelayState parameter was null when it should be returned by the IDP");
+                    event.event(EventType.LOGIN);
+                    event.error(Errors.INVALID_SAML_RESPONSE);
+                    return ErrorPage.error(session, null, Response.Status.BAD_REQUEST, Messages.IDENTITY_PROVIDER_UNEXPECTED_ERROR);
                 }
                 session.getContext().setAuthenticationSession(authSession);
 
@@ -464,7 +467,7 @@ public class SpidSAMLEndpoint {
 
                 if (assertionIsEncrypted) {
                     // This methods writes the parsed and decrypted assertion back on the responseType parameter:
-                    assertionElement = AssertionUtil.decryptAssertion(holder, responseType, keys.getPrivateKey());
+                    assertionElement = AssertionUtil.decryptAssertion(responseType, keys.getPrivateKey());
                 } else {
                     /* We verify the assertion using original document to handle cases where the IdP
                     includes whitespace and/or newlines inside tags. */
@@ -523,7 +526,7 @@ public class SpidSAMLEndpoint {
 
                 if(AssertionUtil.isIdEncrypted(responseType)) {
                     // This methods writes the parsed and decrypted id back on the responseType parameter:
-                    AssertionUtil.decryptId(responseType, keys.getPrivateKey());
+                    AssertionUtil.decryptId(responseType, data -> Collections.singletonList(keys.getPrivateKey()));
                 }
                 AssertionType assertion = responseType.getAssertions().get(0).getAssertion();
 
@@ -549,7 +552,7 @@ public class SpidSAMLEndpoint {
                 }
 
                 //Map<String, String> notes = new HashMap<>();
-                BrokeredIdentityContext identity = new BrokeredIdentityContext(principal);
+                BrokeredIdentityContext identity = new BrokeredIdentityContext(principal, config);
                 identity.getContextData().put(SAML_LOGIN_RESPONSE, responseType);
                 identity.getContextData().put(SAML_ASSERTION, assertion);
                 identity.setAuthenticationSession(authSession);
@@ -600,7 +603,6 @@ public class SpidSAMLEndpoint {
 
                 String brokerUserId = config.getAlias() + "." + principal;
                 identity.setBrokerUserId(brokerUserId);
-                identity.setIdpConfig(config);
                 identity.setIdp(provider);
                 if (authn != null && authn.getSessionIndex() != null) {
                     identity.setBrokerSessionId(config.getAlias() + "." + authn.getSessionIndex());
@@ -627,7 +629,7 @@ public class SpidSAMLEndpoint {
          */
         private AuthenticationSessionModel samlIdpInitiatedSSO(final String clientUrlName) {
             event.event(EventType.LOGIN);
-            CacheControlUtil.noBackButtonCacheControlHeader();
+            CacheControlUtil.noBackButtonCacheControlHeader(SpidSAMLEndpoint.this.session);
             Optional<ClientModel> oClient = SpidSAMLEndpoint.this.session.clients()
               .searchClientsByAttributes(realm, Collections.singletonMap(SamlProtocol.SAML_IDP_INITIATED_SSO_URL_NAME, clientUrlName), 0, 1)
               .findFirst();
@@ -639,8 +641,7 @@ public class SpidSAMLEndpoint {
             }
 
             LoginProtocolFactory factory = (LoginProtocolFactory) session.getKeycloakSessionFactory().getProviderFactory(LoginProtocol.class, SamlProtocol.LOGIN_PROTOCOL);
-            SamlService samlService = (SamlService) factory.createProtocolEndpoint(SpidSAMLEndpoint.this.realm, event);
-            ResteasyProviderFactory.getInstance().injectProperties(samlService);
+            SamlService samlService = (SamlService) factory.createProtocolEndpoint(SpidSAMLEndpoint.this.session, event);
             AuthenticationSessionModel authSession = samlService.getOrCreateLoginSessionForIdpInitiatedSso(session, SpidSAMLEndpoint.this.realm, oClient.get(), null);
             if (authSession == null) {
                 event.error(Errors.INVALID_REDIRECT_URI);
@@ -667,7 +668,7 @@ public class SpidSAMLEndpoint {
                 event.event(EventType.IDENTITY_PROVIDER_RESPONSE);
                 event.detail(Details.REASON, Errors.INVALID_SAML_DOCUMENT);
                 event.error(Errors.INVALID_SAML_RESPONSE);
-                return ErrorPage.error(session, null, Response.Status.BAD_REQUEST, Messages.INVALID_FEDERATED_IDENTITY_ACTION);
+                return ErrorPage.error(session, null, Response.Status.BAD_REQUEST, Messages.IDENTITY_PROVIDER_INVALID_RESPONSE);
             }
             StatusResponseType statusResponse = (StatusResponseType)holder.getSamlObject();
             // validate destination
@@ -691,7 +692,7 @@ public class SpidSAMLEndpoint {
                     logger.error("validation failed", e);
                     event.event(EventType.IDENTITY_PROVIDER_RESPONSE);
                     event.error(Errors.INVALID_SIGNATURE);
-                    return ErrorPage.error(session, null, Response.Status.BAD_REQUEST, Messages.INVALID_FEDERATED_IDENTITY_ACTION);
+                    return ErrorPage.error(session, null, Response.Status.BAD_REQUEST, Messages.IDENTITY_PROVIDER_INVALID_SIGNATURE);
                 }
             }
             if (statusResponse instanceof ResponseType) {
@@ -712,7 +713,7 @@ public class SpidSAMLEndpoint {
                 event.error(Errors.USER_SESSION_NOT_FOUND);
                 return ErrorPage.error(session, null, Response.Status.BAD_REQUEST, Messages.IDENTITY_PROVIDER_UNEXPECTED_ERROR);
             }
-            UserSessionModel userSession = lockUserSessionsForModification(session, () -> session.sessions().getUserSession(realm, relayState));
+            UserSessionModel userSession = session.sessions().getUserSession(realm, relayState);
             if (userSession == null) {
                 logger.error("no valid user session");
                 event.event(EventType.LOGOUT);
@@ -969,7 +970,7 @@ public class SpidSAMLEndpoint {
         }
 
         // 27: Issuer element is empty (SPID check nr27)
-        if (!issuerElement.hasChildNodes() || !StringUtil.isNotNull(issuerElement.getFirstChild().getNodeValue()) || hasNamedChild(issuerElement)) {
+        if (!issuerElement.hasChildNodes() || !org.keycloak.saml.common.util.StringUtil.isNotNull(issuerElement.getFirstChild().getNodeValue()) || hasNamedChild(issuerElement)) {
         	return "SpidSamlCheck_nr27";
         }
         
@@ -1030,7 +1031,7 @@ public class SpidSAMLEndpoint {
         }
 
         // 43: NameID element of the Assertion is empty (SPID check nr43)
-        if (!nameIdElement.hasChildNodes() || !StringUtil.isNotNull(nameIdElement.getFirstChild().getNodeValue()) || hasNamedChild(nameIdElement)) {
+        if (!nameIdElement.hasChildNodes() || !org.keycloak.saml.common.util.StringUtil.isNotNull(nameIdElement.getFirstChild().getNodeValue()) || hasNamedChild(nameIdElement)) {
         	return "SpidSamlCheck_nr43";
         }
                 
@@ -1168,7 +1169,7 @@ public class SpidSAMLEndpoint {
         }
 
         // 67: Issuer element of the Assertion is empty (SPID check nr67)
-        if (!assertionIssuerElement.hasChildNodes() || !StringUtil.isNotNull(assertionIssuerElement.getFirstChild().getNodeValue()) || hasNamedChild(assertionIssuerElement)) {
+        if (!assertionIssuerElement.hasChildNodes() || !org.keycloak.saml.common.util.StringUtil.isNotNull(assertionIssuerElement.getFirstChild().getNodeValue()) || hasNamedChild(assertionIssuerElement)) {
         	return "SpidSamlCheck_nr67";
         }
         
@@ -1252,7 +1253,7 @@ public class SpidSAMLEndpoint {
         }
 
         // 92: AuthStatement AuthStatement AuthContextClassRef Element of the Assertion is empty (SPID check nr92)
-        if (!authnContextClassRef.hasChildNodes() || !StringUtil.isNotNull(authnContextClassRef.getFirstChild().getNodeValue()) || hasNamedChild(authnContextClassRef)) {
+        if (!authnContextClassRef.hasChildNodes() || !org.keycloak.saml.common.util.StringUtil.isNotNull(authnContextClassRef.getFirstChild().getNodeValue()) || hasNamedChild(authnContextClassRef)) {
         	return "SpidSamlCheck_nr92";
         }
         
